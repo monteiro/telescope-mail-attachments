@@ -1,37 +1,87 @@
 <?php
 
-namespace VendorName\Skeleton\Tests;
+namespace Monteiro\TelescopeMailAttachments\Tests;
 
-use Illuminate\Database\Eloquent\Factories\Factory;
+use Monteiro\TelescopeMailAttachments\TelescopeMailAttachmentsServiceProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Telescope\Contracts\EntriesRepository;
+use Laravel\Telescope\Storage\DatabaseEntriesRepository;
+use Laravel\Telescope\Storage\EntryModel;
+use Laravel\Telescope\Telescope;
+use Laravel\Telescope\TelescopeServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
-use VendorName\Skeleton\SkeletonServiceProvider;
 
 class TestCase extends Orchestra
 {
+    use RefreshDatabase;
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        Factory::guessFactoryNamesUsing(
-            fn (string $modelName) => 'VendorName\\Skeleton\\Database\\Factories\\'.class_basename($modelName).'Factory'
-        );
+        Telescope::flushEntries();
+        Telescope::$afterStoringHooks = [];
+    }
+
+    protected function tearDown(): void
+    {
+        Telescope::flushEntries();
+        Telescope::$afterStoringHooks = [];
+
+        parent::tearDown();
     }
 
     protected function getPackageProviders($app)
     {
         return [
-            SkeletonServiceProvider::class,
+            TelescopeServiceProvider::class,
+            TelescopeMailAttachmentsServiceProvider::class,
         ];
     }
 
-    public function getEnvironmentSetUp($app)
+    protected function resolveApplicationCore($app)
     {
-        config()->set('database.default', 'testing');
+        parent::resolveApplicationCore($app);
 
-        /*
-         foreach (\Illuminate\Support\Facades\File::allFiles(__DIR__ . '/../database/migrations') as $migration) {
-            (include $migration->getRealPath())->up();
-         }
-         */
+        $app->detectEnvironment(function () {
+            return 'self-testing';
+        });
+    }
+
+    protected function defineDatabaseMigrations()
+    {
+        $this->loadMigrationsFrom(
+            __DIR__.'/../vendor/laravel/telescope/database/migrations'
+        );
+    }
+
+    protected function defineEnvironment($app)
+    {
+        $app->make('config')->set([
+            'app.key' => 'base64:'.base64_encode(str_repeat('a', 32)),
+            'database.default' => 'testbench',
+            'mail.driver' => 'array',
+            'telescope.enabled' => true,
+            'telescope.storage.database.connection' => 'testbench',
+            'telescope.watchers' => [
+                \Monteiro\TelescopeMailAttachments\MailAttachmentWatcher::class => true,
+            ],
+            'database.connections.testbench' => [
+                'driver' => 'sqlite',
+                'database' => ':memory:',
+                'prefix' => '',
+            ],
+        ]);
+
+        $app->when(DatabaseEntriesRepository::class)
+            ->needs('$connection')
+            ->give('testbench');
+    }
+
+    protected function loadTelescopeEntries()
+    {
+        Telescope::store(app(EntriesRepository::class));
+
+        return EntryModel::all();
     }
 }

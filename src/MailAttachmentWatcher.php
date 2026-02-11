@@ -1,0 +1,147 @@
+<?php
+
+namespace Monteiro\TelescopeMailAttachments;
+
+use Illuminate\Mail\Events\MessageSent;
+use Laravel\Telescope\IncomingEntry;
+use Laravel\Telescope\Telescope;
+use Laravel\Telescope\Watchers\MailWatcher;
+use Symfony\Component\Mime\Part\AbstractPart;
+
+class MailAttachmentWatcher extends MailWatcher
+{
+    /**
+     * Record a mail message was sent.
+     *
+     * @param  \Illuminate\Mail\Events\MessageSent  $event
+     * @return void
+     */
+    public function recordMail(MessageSent $event)
+    {
+        if (! Telescope::isRecording()) {
+            return;
+        }
+
+        $body = $event->message->getBody();
+
+        Telescope::recordMail(IncomingEntry::make([
+            'mailable' => $this->getMailable($event),
+            'queued' => $this->getQueuedStatus($event),
+            'from' => $this->formatAddresses($event->message->getFrom()),
+            'replyTo' => $this->formatAddresses($event->message->getReplyTo()),
+            'to' => $this->formatAddresses($event->message->getTo()),
+            'cc' => $this->formatAddresses($event->message->getCc()),
+            'bcc' => $this->formatAddresses($event->message->getBcc()),
+            'subject' => $event->message->getSubject(),
+            'html' => $body instanceof AbstractPart ? ($event->message->getHtmlBody() ?? $event->message->getTextBody()) : $body,
+            'raw' => $event->message->toString(),
+            'attachments' => $this->extractAttachments($event->message),
+        ])->tags($this->tags($event->message, $event->data)));
+    }
+
+    /**
+     * Extract attachments from the message.
+     *
+     * @param  mixed  $message
+     * @return array
+     */
+    protected function extractAttachments($message)
+    {
+        if (method_exists($message, 'getAttachments')) {
+            return $this->formatAttachments($message->getAttachments());
+        }
+
+        if (method_exists($message, 'getChildren')) {
+            $attachments = collect($message->getChildren())
+                ->filter(fn ($child) => method_exists($child, 'getFilename') && $child->getFilename() !== null)
+                ->values()
+                ->all();
+
+            return $this->formatAttachments($attachments);
+        }
+
+        return [];
+    }
+
+    /**
+     * Format the attachments for the given message.
+     *
+     * @param  array  $attachments
+     * @return array
+     */
+    protected function formatAttachments(array $attachments)
+    {
+        $storeContent = config('telescope-mail-attachments.store_content', true);
+
+        return collect($attachments)->map(function ($attachment) use ($storeContent) {
+            $body = $attachment->getBody();
+
+            $filename = method_exists($attachment, 'getFilename')
+                ? $attachment->getFilename()
+                : $attachment->getPreparedHeaders()->getHeaderParameter('Content-Disposition', 'filename');
+
+            $contentType = method_exists($attachment, 'getContentType')
+                ? $attachment->getContentType()
+                : $attachment->getMediaType().'/'.$attachment->getMediaSubtype();
+
+            $data = [
+                'filename' => $filename,
+                'mime_type' => $contentType,
+                'size' => strlen($body),
+            ];
+
+            if ($storeContent) {
+                $data['content'] = base64_encode($body);
+            }
+
+            return $data;
+        })->all();
+    }
+
+    /**
+     * Get the name of the mailable.
+     *
+     * @param  \Illuminate\Mail\Events\MessageSent  $event
+     * @return string
+     */
+    protected function getMailable($event)
+    {
+        if (isset($event->data['__laravel_notification'])) {
+            return $event->data['__laravel_notification'];
+        }
+
+        return $event->data['__telescope_mailable'] ?? '';
+    }
+
+    /**
+     * Determine whether the mailable was queued.
+     *
+     * @param  \Illuminate\Mail\Events\MessageSent  $event
+     * @return bool
+     */
+    protected function getQueuedStatus($event)
+    {
+        if (isset($event->data['__laravel_notification_queued'])) {
+            return $event->data['__laravel_notification_queued'];
+        }
+
+        return $event->data['__telescope_queued'] ?? false;
+    }
+
+    /**
+     * Extract the tags from the message.
+     *
+     * @param  \Symfony\Component\Mime\Email  $message
+     * @param  array  $data
+     * @return array
+     */
+    private function tags($message, $data)
+    {
+        return array_merge(
+            array_keys($this->formatAddresses($message->getTo()) ?: []),
+            array_keys($this->formatAddresses($message->getCc()) ?: []),
+            array_keys($this->formatAddresses($message->getBcc()) ?: []),
+            $data['__telescope'] ?? []
+        );
+    }
+}

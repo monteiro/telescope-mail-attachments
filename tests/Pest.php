@@ -1,5 +1,3 @@
 <?php
 
-use VendorName\Skeleton\Tests\TestCase;
-
-uses(TestCase::class)->in(__DIR__);
+// Tests use `uses(TestCase::class)` directly in each test file.
