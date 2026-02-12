@@ -74,9 +74,10 @@ class TelescopeMailAttachmentsServiceProvider extends ServiceProvider
 
         // Re-add the catch-all route so it matches last
         if ($catchAll) {
-            $routes->add($catchAll);
-            $routes->refreshNameLookups();
-            $routes->refreshActionLookups();
+            $currentRoutes = $this->app['router']->getRoutes();
+            $currentRoutes->add($catchAll);
+            $currentRoutes->refreshNameLookups();
+            $currentRoutes->refreshActionLookups();
         }
     }
 

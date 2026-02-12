@@ -1,25 +1,26 @@
 /**
- * Telescope Mail Attachments - DOM Injection Script
+ * Telescope Mail Attachments - Vue Component Override
  *
- * Injects attachment badges on the mail index page and an attachments
- * table on the mail preview page. Uses MutationObserver to detect when
- * Telescope's Vue SPA renders content.
+ * Replaces the mail-preview route component with an enhanced version
+ * that includes an attachments table. Works with Telescope's Vue 2 SPA
+ * by overriding the route component via Vue Router's matcher.
  */
 (function () {
-    const PROCESSED_ATTR = 'data-attachments-processed';
+    'use strict';
 
     /**
-     * Get Telescope's base path from the global variable.
+     * Format a list of email addresses (replicates lodash _.chain logic).
      */
-    function getBasePath() {
-        return (window.Telescope && window.Telescope.path) || '/telescope';
-    }
-
-    /**
-     * Get the current hash route.
-     */
-    function getCurrentRoute() {
-        return window.location.hash.replace(/^#/, '');
+    function formatAddresses(addresses) {
+        if (!addresses) return '';
+        var result = [];
+        for (var email in addresses) {
+            if (addresses.hasOwnProperty(email)) {
+                var name = addresses[email];
+                result.push((name ? '<' + name + '> ' : '') + email);
+            }
+        }
+        return result.join(', ');
     }
 
     /**
@@ -27,237 +28,146 @@
      */
     function formatBytes(bytes) {
         if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        var k = 1024;
+        var sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     /**
-     * Fetch a mail entry's data from Telescope's API.
+     * The enhanced mail preview component template.
+     * Reproduces the original Telescope mail preview template and adds
+     * an Attachments row after the Download row.
      */
-    async function fetchMailEntry(entryId) {
-        const basePath = getBasePath();
-        const response = await fetch(basePath + '/telescope-api/mail/' + entryId);
-        if (!response.ok) return null;
-        const data = await response.json();
-        return data.entry || data;
-    }
+    var template = ''
+        + '<preview-screen title="Mail Details" resource="mail" :id="$route.params.id">'
+        +   '<template slot="table-parameters" slot-scope="slotProps">'
+        +     '<tr>'
+        +       '<td class="table-fit text-muted">Mailable</td>'
+        +       '<td>'
+        +         '{{ slotProps.entry.content.mailable }}'
+        +         '<span class="badge badge-secondary ml-2" v-if="slotProps.entry.content.queued"> Queued </span>'
+        +       '</td>'
+        +     '</tr>'
+        +     '<tr>'
+        +       '<td class="table-fit text-muted">From</td>'
+        +       '<td>{{ formatAddresses(slotProps.entry.content.from) }}</td>'
+        +     '</tr>'
+        +     '<tr>'
+        +       '<td class="table-fit text-muted">To</td>'
+        +       '<td>{{ formatAddresses(slotProps.entry.content.to) }}</td>'
+        +     '</tr>'
+        +     '<tr v-if="slotProps.entry.content.replyTo">'
+        +       '<td class="table-fit text-muted">Reply-To</td>'
+        +       '<td>{{ formatAddresses(slotProps.entry.content.replyTo) }}</td>'
+        +     '</tr>'
+        +     '<tr v-if="slotProps.entry.content.cc">'
+        +       '<td class="table-fit text-muted">CC</td>'
+        +       '<td>{{ formatAddresses(slotProps.entry.content.cc) }}</td>'
+        +     '</tr>'
+        +     '<tr v-if="slotProps.entry.content.bcc">'
+        +       '<td class="table-fit text-muted">BCC</td>'
+        +       '<td>{{ formatAddresses(slotProps.entry.content.bcc) }}</td>'
+        +     '</tr>'
+        +     '<tr>'
+        +       '<td class="table-fit text-muted">Subject</td>'
+        +       '<td>{{ slotProps.entry.content.subject }}</td>'
+        +     '</tr>'
+        +     '<tr>'
+        +       '<td class="table-fit text-muted">Download</td>'
+        +       '<td>'
+        +         '<a :href="Telescope.basePath + \'/telescope-api/mail/\' + $route.params.id + \'/download\'">'
+        +           'Download .eml file'
+        +         '</a>'
+        +       '</td>'
+        +     '</tr>'
+        // --- Attachments row (addition) ---
+        +     '<tr v-if="slotProps.entry.content.attachments && slotProps.entry.content.attachments.length">'
+        +       '<td class="table-fit text-muted">Attachments</td>'
+        +       '<td>'
+        +         '<table class="table table-sm mb-0">'
+        +           '<thead><tr><th>Filename</th><th>Size</th><th>Type</th></tr></thead>'
+        +           '<tbody>'
+        +             '<tr v-for="(attachment, index) in slotProps.entry.content.attachments" :key="index">'
+        +               '<td>'
+        +                 '<a v-if="attachment.content" :href="attachmentUrl(index)">{{ attachment.filename }}</a>'
+        +                 '<span v-else>{{ attachment.filename }}</span>'
+        +               '</td>'
+        +               '<td>{{ formatBytes(attachment.size) }}</td>'
+        +               '<td>{{ attachment.mime_type }}</td>'
+        +             '</tr>'
+        +           '</tbody>'
+        +         '</table>'
+        +       '</td>'
+        +     '</tr>'
+        // --- End attachments row ---
+        +   '</template>'
+        +   '<div slot="after-attributes-card" slot-scope="slotProps" class="mt-5">'
+        +     '<div class="card">'
+        +       '<iframe '
+        +         ':src="Telescope.basePath + \'/telescope-api/mail/\' + $route.params.id + \'/preview\'" '
+        +         'width="100%" height="400" style="border:none;"'
+        +       '></iframe>'
+        +     '</div>'
+        +   '</div>'
+        + '</preview-screen>';
 
     /**
-     * Create the paperclip SVG icon.
+     * The enhanced mail preview component definition.
      */
-    function createPaperclipIcon() {
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-        svg.setAttribute('viewBox', '0 0 20 20');
-        svg.setAttribute('width', '12');
-        svg.setAttribute('height', '12');
-        svg.setAttribute('fill', 'currentColor');
-        svg.style.verticalAlign = '-1px';
-
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('fill-rule', 'evenodd');
-        path.setAttribute('d', 'M15.621 4.379a3 3 0 0 0-4.242 0l-7 7a3 3 0 0 0 4.241 4.243h.001l.497-.5a.75.75 0 0 1 1.064 1.057l-.498.501-.002.002a4.5 4.5 0 0 1-6.364-6.364l7-7a4.5 4.5 0 0 1 6.368 6.36l-3.455 3.553A2.625 2.625 0 1 1 9.52 9.52l3.45-3.451a.75.75 0 1 1 1.061 1.06l-3.45 3.451a1.125 1.125 0 0 0 1.587 1.595l3.454-3.553a3 3 0 0 0 0-4.242Z');
-        path.setAttribute('clip-rule', 'evenodd');
-
-        svg.appendChild(path);
-        return svg;
-    }
-
-    // =========================================================================
-    // Mail Index Page — Attachment badges
-    // =========================================================================
-
-    /**
-     * Process a single table row on the mail index page.
-     * Fetches the entry data and adds an attachment badge if needed.
-     */
-    async function processIndexRow(row) {
-        if (row.hasAttribute(PROCESSED_ATTR)) return;
-        row.setAttribute(PROCESSED_ATTR, '1');
-
-        // Find the router-link in the last cell to extract the entry ID
-        const link = row.querySelector('td:last-child a[href]');
-        if (!link) return;
-
-        const href = link.getAttribute('href');
-        const match = href.match(/\/mail\/([^/]+)/);
-        if (!match) return;
-
-        const entryId = match[1];
-        const entry = await fetchMailEntry(entryId);
-        if (!entry || !entry.content || !entry.content.attachments || !entry.content.attachments.length) return;
-
-        // Find the first <td> and add the badge after the "Queued" badge (or after the mailable name)
-        const firstTd = row.querySelector('td');
-        if (!firstTd) return;
-
-        // Check if badge already exists
-        if (firstTd.querySelector('.telescope-mail-attachments-badge')) return;
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge-secondary ml-2 telescope-mail-attachments-badge';
-        badge.appendChild(createPaperclipIcon());
-        badge.appendChild(document.createTextNode(' ' + entry.content.attachments.length));
-
-        // Insert after the last badge or after the first span
-        const existingBadges = firstTd.querySelectorAll('.badge');
-        if (existingBadges.length > 0) {
-            existingBadges[existingBadges.length - 1].after(badge);
-        } else {
-            const firstSpan = firstTd.querySelector('span');
-            if (firstSpan) {
-                firstSpan.after(badge);
+    var EnhancedMailPreview = {
+        template: template,
+        methods: {
+            formatAddresses: formatAddresses,
+            formatBytes: formatBytes,
+            attachmentUrl: function (index) {
+                return Telescope.basePath + '/telescope-api/mail/' + this.$route.params.id + '/attachments/' + index;
             }
         }
-    }
+    };
 
     /**
-     * Process all rows on the mail index page.
+     * Replace the mail-preview route component.
      */
-    function processIndexPage() {
-        const route = getCurrentRoute();
-        if (!route.match(/^\/mail\/?$/)) return;
+    function overrideRoute() {
+        var el = document.getElementById('telescope');
+        if (!el || !el.__vue__) return false;
 
-        const rows = document.querySelectorAll('table tbody tr');
-        rows.forEach(processIndexRow);
-    }
+        var app = el.__vue__;
+        var router = app.$router;
+        if (!router) return false;
 
-    // =========================================================================
-    // Mail Preview Page — Attachments table
-    // =========================================================================
+        var routes = router.options.routes;
+        if (!routes) return false;
 
-    /**
-     * Inject the attachments table on the mail preview page.
-     */
-    async function processPreviewPage() {
-        const route = getCurrentRoute();
-        const match = route.match(/^\/mail\/([^/]+)$/);
-        if (!match) return;
-
-        // Don't process if already injected
-        if (document.querySelector('.telescope-mail-attachments-table')) return;
-
-        const entryId = match[1];
-
-        // Wait for the preview table to render (look for the "Download" row)
-        const tables = document.querySelectorAll('table.table');
-        let targetTable = null;
-        let downloadRow = null;
-
-        for (const table of tables) {
-            const rows = table.querySelectorAll('tr');
-            for (const row of rows) {
-                const td = row.querySelector('td');
-                if (td && td.textContent.trim() === 'Download') {
-                    targetTable = table;
-                    downloadRow = row;
-                    break;
-                }
+        for (var i = 0; i < routes.length; i++) {
+            if (routes[i].name === 'mail-preview') {
+                routes[i].component = EnhancedMailPreview;
+                break;
             }
-            if (downloadRow) break;
         }
 
-        if (!downloadRow) return;
+        // Reset the matcher so the router picks up the new component
+        var freshRouter = new router.constructor({ mode: 'history', routes: [] });
+        router.matcher = freshRouter.matcher;
+        router.addRoutes(routes);
 
-        const entry = await fetchMailEntry(entryId);
-        if (!entry || !entry.content || !entry.content.attachments || !entry.content.attachments.length) return;
-
-        const basePath = getBasePath();
-        const attachments = entry.content.attachments;
-
-        // Create the attachments row
-        const tr = document.createElement('tr');
-        tr.className = 'telescope-mail-attachments-table';
-
-        const labelTd = document.createElement('td');
-        labelTd.className = 'table-fit text-muted';
-        labelTd.textContent = 'Attachments';
-
-        const contentTd = document.createElement('td');
-
-        const innerTable = document.createElement('table');
-        innerTable.className = 'table table-sm mb-0';
-
-        // Table header
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-        ['Filename', 'Size', 'Type'].forEach(function (text) {
-            const th = document.createElement('th');
-            th.textContent = text;
-            headerRow.appendChild(th);
-        });
-        thead.appendChild(headerRow);
-        innerTable.appendChild(thead);
-
-        // Table body
-        const tbody = document.createElement('tbody');
-        attachments.forEach(function (attachment, index) {
-            const row = document.createElement('tr');
-
-            const filenameTd = document.createElement('td');
-            if (attachment.content) {
-                const link = document.createElement('a');
-                link.href = basePath + '/telescope-api/mail/' + entryId + '/attachments/' + index;
-                link.textContent = attachment.filename;
-                filenameTd.appendChild(link);
-            } else {
-                filenameTd.textContent = attachment.filename;
-            }
-
-            const sizeTd = document.createElement('td');
-            sizeTd.textContent = formatBytes(attachment.size);
-
-            const typeTd = document.createElement('td');
-            typeTd.textContent = attachment.mime_type;
-
-            row.appendChild(filenameTd);
-            row.appendChild(sizeTd);
-            row.appendChild(typeTd);
-            tbody.appendChild(row);
-        });
-        innerTable.appendChild(tbody);
-
-        contentTd.appendChild(innerTable);
-        tr.appendChild(labelTd);
-        tr.appendChild(contentTd);
-
-        // Insert after the download row
-        downloadRow.after(tr);
+        return true;
     }
 
-    // =========================================================================
-    // Observer — Watch for DOM changes in Telescope's SPA
-    // =========================================================================
-
-    let debounceTimer = null;
-
-    function handleMutations() {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(function () {
-            processIndexPage();
-            processPreviewPage();
-        }, 200);
-    }
-
-    // Start observing once the DOM is ready
+    /**
+     * Poll until Telescope's Vue app is mounted, then override the route.
+     */
     function init() {
-        const observer = new MutationObserver(handleMutations);
+        var attempts = 0;
+        var maxAttempts = 50; // 5 seconds max
 
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-        });
-
-        // Also listen for hash changes (Vue Router navigation)
-        window.addEventListener('hashchange', function () {
-            // Small delay to let Vue render the new page
-            setTimeout(handleMutations, 300);
-        });
-
-        // Initial run
-        handleMutations();
+        var interval = setInterval(function () {
+            attempts++;
+            if (overrideRoute() || attempts >= maxAttempts) {
+                clearInterval(interval);
+            }
+        }, 100);
     }
 
     if (document.readyState === 'loading') {
