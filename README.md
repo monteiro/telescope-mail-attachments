@@ -43,6 +43,11 @@ You can also set `TELESCOPE_MAIL_ATTACHMENTS_STORE_CONTENT=false` in your `.env`
 - Download endpoint for individual attachments
 - Optional content storage toggle to manage database size
 
+## Screenshot
+
+<img width="2370" height="1632" alt="Captura de ecrã 2026-02-25, às 16 11 14" src="https://github.com/user-attachments/assets/f72c5cac-bfca-4157-ab2b-417a73ae5475" />
+
+
 ## Testing
 
 ```bash
