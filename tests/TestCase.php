@@ -2,13 +2,13 @@
 
 namespace Monteiro\TelescopeMailAttachments\Tests;
 
-use Monteiro\TelescopeMailAttachments\TelescopeMailAttachmentsServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Telescope\Contracts\EntriesRepository;
 use Laravel\Telescope\Storage\DatabaseEntriesRepository;
 use Laravel\Telescope\Storage\EntryModel;
 use Laravel\Telescope\Telescope;
 use Laravel\Telescope\TelescopeServiceProvider;
+use Monteiro\TelescopeMailAttachments\TelescopeMailAttachmentsServiceProvider;
 use Orchestra\Testbench\TestCase as Orchestra;
 
 class TestCase extends Orchestra

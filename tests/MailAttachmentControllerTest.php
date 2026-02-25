@@ -1,8 +1,8 @@
 <?php
 
-use Monteiro\TelescopeMailAttachments\Tests\TestCase;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Telescope\Http\Middleware\Authorize;
+use Monteiro\TelescopeMailAttachments\Tests\TestCase;
 
 uses(TestCase::class);
 

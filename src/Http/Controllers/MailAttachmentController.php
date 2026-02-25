@@ -11,7 +11,6 @@ class MailAttachmentController extends Controller
     /**
      * Download a mail attachment.
      *
-     * @param  \Laravel\Telescope\Contracts\EntriesRepository  $storage
      * @param  int  $id
      * @param  int  $index
      * @return mixed

@@ -12,9 +12,8 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "monteiro",
-            "email": "music.music59@gmail.com",
-            "role": "Developer"
+            "name": "Hugo Monteiro",
+            "email": "hugo.monteiro@gmail.com"
         }
     ],
     "require": {

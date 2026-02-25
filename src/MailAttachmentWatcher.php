@@ -13,7 +13,6 @@ class MailAttachmentWatcher extends MailWatcher
     /**
      * Record a mail message was sent.
      *
-     * @param  \Illuminate\Mail\Events\MessageSent  $event
      * @return void
      */
     public function recordMail(MessageSent $event)
@@ -66,7 +65,6 @@ class MailAttachmentWatcher extends MailWatcher
     /**
      * Format the attachments for the given message.
      *
-     * @param  array  $attachments
      * @return array
      */
     protected function formatAttachments(array $attachments)
