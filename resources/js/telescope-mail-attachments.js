@@ -17,7 +17,7 @@
         for (var email in addresses) {
             if (addresses.hasOwnProperty(email)) {
                 var name = addresses[email];
-                result.push((name ? '<' + name + '> ' : '') + email);
+                result.push((name ? name + ' <' + email + '>' : email));
             }
         }
         return result.join(', ');
@@ -148,9 +148,14 @@
         }
 
         // Reset the matcher so the router picks up the new component
-        var freshRouter = new router.constructor({ mode: 'history', routes: [] });
-        router.matcher = freshRouter.matcher;
-        router.addRoutes(routes);
+        try {
+            var freshRouter = new router.constructor({ mode: 'history', routes: [] });
+            router.matcher = freshRouter.matcher;
+            router.addRoutes(routes);
+        } catch (e) {
+            console.error('[telescope-mail-attachments] Failed to reset router matcher:', e);
+            return false;
+        }
 
         return true;
     }

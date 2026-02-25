@@ -2,6 +2,7 @@
 
 namespace Monteiro\TelescopeMailAttachments\Http\Controllers;
 
+use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use Laravel\Telescope\Contracts\EntriesRepository;
 use Symfony\Component\HttpFoundation\HeaderUtils;
@@ -10,12 +11,8 @@ class MailAttachmentController extends Controller
 {
     /**
      * Download a mail attachment.
-     *
-     * @param  int  $id
-     * @param  int  $index
-     * @return mixed
      */
-    public function show(EntriesRepository $storage, $id, $index)
+    public function show(EntriesRepository $storage, string $id, int $index): Response
     {
         $attachments = $storage->find($id)->content['attachments'] ?? [];
 
@@ -29,7 +26,11 @@ class MailAttachmentController extends Controller
             abort(404, 'Attachment content was not stored. Enable store_content in config.');
         }
 
-        $content = base64_decode($attachment['content']);
+        $content = base64_decode($attachment['content'], true);
+
+        if ($content === false) {
+            abort(500, 'Failed to decode attachment content.');
+        }
 
         return response($content, 200, [
             'Content-Type' => $attachment['mime_type'],

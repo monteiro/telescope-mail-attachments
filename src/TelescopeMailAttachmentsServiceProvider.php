@@ -127,6 +127,7 @@ class TelescopeMailAttachmentsServiceProvider extends ServiceProvider
      */
     protected function registerMiddleware(): void
     {
+        /** @var \Illuminate\Routing\Router $router */
         $router = $this->app['router'];
 
         $router->pushMiddlewareToGroup('telescope', Http\Middleware\InjectJavaScript::class);

@@ -32,7 +32,7 @@ class MailAttachmentWatcher extends MailWatcher
             'cc' => $this->formatAddresses($event->message->getCc()),
             'bcc' => $this->formatAddresses($event->message->getBcc()),
             'subject' => $event->message->getSubject(),
-            'html' => $body instanceof AbstractPart ? ($event->message->getHtmlBody() ?? $event->message->getTextBody()) : $body,
+            'html' => $body instanceof AbstractPart ? ($event->message->getHtmlBody() ?? $event->message->getTextBody()) : $body, // @phpstan-ignore instanceof.alwaysTrue
             'raw' => $event->message->toString(),
             'attachments' => $this->extractAttachments($event->message),
         ])->tags($this->tags($event->message, $event->data)));
@@ -42,16 +42,18 @@ class MailAttachmentWatcher extends MailWatcher
      * Extract attachments from the message.
      *
      * @param  mixed  $message
-     * @return array
+     * @return array<int, array<string, mixed>>
      */
-    protected function extractAttachments($message)
+    protected function extractAttachments($message): array
     {
         if (method_exists($message, 'getAttachments')) {
             return $this->formatAttachments($message->getAttachments());
         }
 
         if (method_exists($message, 'getChildren')) {
-            $attachments = collect($message->getChildren())
+            /** @var array<int, mixed> $children */
+            $children = $message->getChildren();
+            $attachments = collect($children)
                 ->filter(fn ($child) => method_exists($child, 'getFilename') && $child->getFilename() !== null)
                 ->values()
                 ->all();
@@ -65,9 +67,10 @@ class MailAttachmentWatcher extends MailWatcher
     /**
      * Format the attachments for the given message.
      *
-     * @return array
+     * @param  array<int, mixed>  $attachments
+     * @return array<int, array<string, mixed>>
      */
-    protected function formatAttachments(array $attachments)
+    protected function formatAttachments(array $attachments): array
     {
         $storeContent = config('telescope-mail-attachments.store_content', true);
 
@@ -100,9 +103,8 @@ class MailAttachmentWatcher extends MailWatcher
      * Get the name of the mailable.
      *
      * @param  \Illuminate\Mail\Events\MessageSent  $event
-     * @return string
      */
-    protected function getMailable($event)
+    protected function getMailable($event): string
     {
         if (isset($event->data['__laravel_notification'])) {
             return $event->data['__laravel_notification'];
@@ -115,9 +117,8 @@ class MailAttachmentWatcher extends MailWatcher
      * Determine whether the mailable was queued.
      *
      * @param  \Illuminate\Mail\Events\MessageSent  $event
-     * @return bool
      */
-    protected function getQueuedStatus($event)
+    protected function getQueuedStatus($event): bool
     {
         if (isset($event->data['__laravel_notification_queued'])) {
             return $event->data['__laravel_notification_queued'];
@@ -129,11 +130,10 @@ class MailAttachmentWatcher extends MailWatcher
     /**
      * Extract the tags from the message.
      *
-     * @param  \Symfony\Component\Mime\Email  $message
-     * @param  array  $data
-     * @return array
+     * @param  array<string, mixed>  $data
+     * @return array<int, string>
      */
-    private function tags($message, $data)
+    private function tags(\Symfony\Component\Mime\Email $message, array $data): array
     {
         return array_merge(
             array_keys($this->formatAddresses($message->getTo()) ?: []),

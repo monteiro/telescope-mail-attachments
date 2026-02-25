@@ -22,6 +22,11 @@ class InjectJavaScript
         $content = $response->getContent();
 
         $js = file_get_contents(__DIR__.'/../../../resources/js/telescope-mail-attachments.js');
+
+        if ($js === false) {
+            return $response;
+        }
+
         $script = "<script type=\"module\">{$js}</script>";
 
         $content = str_replace('</body>', $script.'</body>', $content);
@@ -36,7 +41,7 @@ class InjectJavaScript
      */
     protected function shouldInject(Response $response): bool
     {
-        if (! method_exists($response, 'getContent')) {
+        if (! method_exists($response, 'getContent')) { // @phpstan-ignore function.alreadyNarrowedType
             return false;
         }
 

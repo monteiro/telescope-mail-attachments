@@ -9,10 +9,8 @@ class MailController extends TelescopeMailController
 {
     /**
      * The watcher class for the controller.
-     *
-     * @return string
      */
-    protected function watcher()
+    protected function watcher(): string
     {
         return MailAttachmentWatcher::class;
     }
