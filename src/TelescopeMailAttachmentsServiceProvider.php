@@ -43,29 +43,29 @@ class TelescopeMailAttachmentsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register the package route for attachment downloads.
+     * Register the package routes.
      *
-     * Telescope registers a catch-all `{view?}` route that matches any path.
-     * We must ensure our more specific route takes priority by temporarily
-     * removing the catch-all, registering our route, then re-adding it.
+     * Telescope registers a catch-all `{view?}` route and mail routes that
+     * reference the original MailWatcher. We remove those and re-register
+     * them pointing to our controllers so the watcher status is correct.
      */
     protected function registerRoutes(): void
     {
         $options = [
             'prefix' => config('telescope.path', 'telescope'),
-            'middleware' => config('telescope.middleware', ['web']),
+            'middleware' => 'telescope',
         ];
 
         if ($domain = config('telescope.domain')) {
             $options['domain'] = $domain;
         }
 
-        // Find and remove Telescope's catch-all route, register ours, then re-add it
-        $router = $this->app['router'];
-        $routes = $router->getRoutes();
-        $catchAll = $this->removeCatchAllRoute($routes);
+        $telescopePath = config('telescope.path', 'telescope');
+        $catchAll = $this->removeTelescopeRoutes($telescopePath);
 
         Route::group($options, function () {
+            Route::post('/telescope-api/mail', [Http\Controllers\MailController::class, 'index']);
+            Route::get('/telescope-api/mail/{telescopeEntryId}', [Http\Controllers\MailController::class, 'show']);
             Route::get(
                 '/telescope-api/mail/{telescopeEntryId}/attachments/{index}',
                 [Http\Controllers\MailAttachmentController::class, 'show']
@@ -82,34 +82,41 @@ class TelescopeMailAttachmentsServiceProvider extends ServiceProvider
     }
 
     /**
-     * Remove Telescope's catch-all route from the route collection.
+     * Remove Telescope's mail routes and catch-all route from the route collection.
      */
-    protected function removeCatchAllRoute(RouteCollection $routes): ?RoutingRoute
+    protected function removeTelescopeRoutes(string $telescopePath): ?RoutingRoute
     {
-        $telescopePath = config('telescope.path', 'telescope');
+        $routes = $this->app['router']->getRoutes();
         $catchAll = null;
+
+        $mailUris = [
+            $telescopePath.'/telescope-api/mail',
+            $telescopePath.'/telescope-api/mail/{telescopeEntryId}',
+        ];
+
+        $routesToRemove = [];
 
         foreach ($routes->getRoutes() as $route) {
             if ($route->uri() === $telescopePath.'/{view?}' && in_array('GET', $route->methods())) {
                 $catchAll = $route;
-                break;
+                $routesToRemove[] = $route;
+            } elseif (in_array($route->uri(), $mailUris)) {
+                $routesToRemove[] = $route;
             }
         }
 
-        if (! $catchAll) {
+        if (empty($routesToRemove)) {
             return null;
         }
 
-        // Rebuild the route collection without the catch-all
         $newRoutes = new RouteCollection;
 
         foreach ($routes->getRoutes() as $route) {
-            if ($route !== $catchAll) {
+            if (! in_array($route, $routesToRemove, true)) {
                 $newRoutes->add($route);
             }
         }
 
-        // Replace the router's route collection
         $this->app['router']->setRoutes($newRoutes);
 
         return $catchAll;
